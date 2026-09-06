@@ -43,6 +43,25 @@ export const CameraHUD: React.FC<{ onCapture: () => void; onExit: () => void; sh
   const meter = engine.meterError();
   const conf = engine.subjectConfidence;
 
+  // AF bracket: tracks the subject on screen when there's one to focus on,
+  // otherwise sits centered like a rangefinder's default focus point.
+  // Turns green using the same circle-of-confusion math scoreShot() grades
+  // photos on, so "locked" here means the frame would actually score sharp.
+  let afPos = { x: 50, y: 50 };
+  let afLocked = false;
+  if (engine.subject) {
+    const head = engine.subjectHeadPos().clone().project(engine.camera);
+    if (head.z <= 1) {
+      const x = (head.x + 1) / 2, y = (1 - head.y) / 2;
+      if (x > -0.15 && x < 1.15 && y > -0.15 && y < 1.15) {
+        afPos = { x: x * 100, y: y * 100 };
+        const subjDist = engine.camera.position.distanceTo(engine.subjectHeadPos());
+        const coc = Math.abs(c.focus - subjDist) * (c.focal / 50) / Math.max(1.2, c.aperture);
+        afLocked = coc < 0.2;
+      }
+    }
+  }
+
   const step = <T,>(arr: T[], cur: T, dir: number): T => {
     const i = arr.indexOf(cur);
     return arr[Math.max(0, Math.min(arr.length - 1, (i < 0 ? 0 : i) + dir))];
@@ -52,6 +71,26 @@ export const CameraHUD: React.FC<{ onCapture: () => void; onExit: () => void; sh
     <div className="pointer-events-none fixed inset-0 z-20">
       {/* viewfinder frame */}
       <div className="absolute inset-0 border-[10px] border-black/70" />
+
+      {/* AF-area corner brackets, inset from the frame like a mirrorless
+          viewfinder's focus-zone boundary — clear of the corner chips */}
+      <div className="absolute left-[9%] top-[13%] h-6 w-6 border-l-2 border-t-2 border-white/40" />
+      <div className="absolute right-[9%] top-[13%] h-6 w-6 border-r-2 border-t-2 border-white/40" />
+      <div className="absolute bottom-[13%] left-[9%] h-6 w-6 border-b-2 border-l-2 border-white/40" />
+      <div className="absolute bottom-[13%] right-[9%] h-6 w-6 border-b-2 border-r-2 border-white/40" />
+
+      {/* AF bracket: on the subject when there is one, centered otherwise */}
+      <div
+        className={cx('absolute h-20 w-20 -translate-x-1/2 -translate-y-1/2 rounded-sm border-2 transition-colors duration-150',
+          afLocked ? 'border-emerald-400' : 'border-white/60')}
+        style={{ left: `${afPos.x}%`, top: `${afPos.y}%` }}
+      >
+        <div className={cx('absolute -left-1 -top-1 h-2 w-2 border-l-2 border-t-2', afLocked ? 'border-emerald-400' : 'border-white/60')} />
+        <div className={cx('absolute -right-1 -top-1 h-2 w-2 border-r-2 border-t-2', afLocked ? 'border-emerald-400' : 'border-white/60')} />
+        <div className={cx('absolute -bottom-1 -left-1 h-2 w-2 border-b-2 border-l-2', afLocked ? 'border-emerald-400' : 'border-white/60')} />
+        <div className={cx('absolute -bottom-1 -right-1 h-2 w-2 border-b-2 border-r-2', afLocked ? 'border-emerald-400' : 'border-white/60')} />
+      </div>
+
       <div className="absolute left-6 top-6 flex items-center gap-2">
         <Chip tone="gold">VIEWFINDER</Chip>
         <span className="font-mono text-[10px] text-stone-400">{shots}/{maxShots} FRAMES</span>

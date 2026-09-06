@@ -266,7 +266,7 @@ export interface WorldRefs {
   streetLights: THREE.PointLight[];
   windowMats: THREE.MeshBasicMaterial[];
   train: THREE.Group;
-  traffic: { mesh: THREE.Group; angle: number; radius: number; speed: number; cx: number; cz: number }[];
+  traffic: { mesh: THREE.Group; angle: number; radius: number; speed: number; cx: number; cz: number; axis: 'x' | 'z'; lane: number }[];
   peds: { parts: CharParts; angle: number; radius: number; speed: number; cx: number; cz: number }[];
   rain: THREE.Points;
   snow: THREE.Points;
@@ -583,11 +583,23 @@ export function buildDistrict(): WorldRefs {
   const snow = mkParticles(900, 0xffffff, 0.24);
 
   // ---- traffic + pedestrians ----
+  // Cars drive back and forth along the actual road strips (main road along
+  // X centered on the origin, cross road along Z centered on (-10, 40)),
+  // each pinned to a fixed lane offset instead of the old decorative
+  // ellipse, which mostly floated off the pavement.
   const traffic: WorldRefs['traffic'] = [];
+  const trafficPaths: { axis: 'x' | 'z'; cx: number; cz: number; radius: number; lane: number }[] = [
+    { axis: 'x', cx: 0, cz: 0, radius: 130, lane: 4 },
+    { axis: 'x', cx: 0, cz: 0, radius: 120, lane: -4 },
+    { axis: 'x', cx: 0, cz: 0, radius: 110, lane: 4 },
+    { axis: 'z', cx: -10, cz: 40, radius: 70, lane: -4 },
+    { axis: 'z', cx: -10, cz: 40, radius: 60, lane: 4 },
+  ];
   for (let i = 0; i < 5; i++) {
     const c = buildCar([0x7c8288, 0x4a5a6a, 0x8a5c4a, 0x2f3336, 0xa8a49a][i]);
     root.add(c);
-    traffic.push({ mesh: c, angle: (i / 5) * Math.PI * 2, radius: 70 + i * 6, speed: 0.11 + i * 0.02, cx: 0, cz: 0 });
+    const p = trafficPaths[i];
+    traffic.push({ mesh: c, angle: (i / 5) * Math.PI * 2, radius: p.radius, speed: 0.11 + i * 0.02, cx: p.cx, cz: p.cz, axis: p.axis, lane: p.lane });
   }
   const peds: WorldRefs['peds'] = [];
   for (let i = 0; i < 4; i++) {

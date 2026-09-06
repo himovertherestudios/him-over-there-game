@@ -42,6 +42,16 @@ export class TouchSource implements InputSource {
   }
 
   /**
+   * How far the move stick is pushed, 0..1 — lets movement speed scale
+   * with deflection instead of being all-or-nothing like a key press.
+   * Reads 0 when centered (including on keyboard, which never sets this),
+   * so keyboard movement is unaffected by any speed scaling built on it.
+   */
+  get magnitude() {
+    return Math.min(1, Math.hypot(this.joyX, this.joyY));
+  }
+
+  /**
    * Right-side look stick: x/y in -1..1, screen-drag convention. Unlike the
    * move stick this isn't translated into held actions — the engine reads
    * it directly every frame and integrates it into yaw/pitch like a

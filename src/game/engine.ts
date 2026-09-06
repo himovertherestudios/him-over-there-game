@@ -633,13 +633,19 @@ class Engine {
       }
       if (refs.train.position.x < 300) refs.train.position.x += 46 * dt;
 
-      // traffic
+      // traffic — drives back and forth along its assigned road, pinned to
+      // a fixed lane offset on the cross axis instead of drifting off it.
       refs.traffic.forEach((c) => {
         c.angle += c.speed * dt;
-        const x = Math.cos(c.angle) * c.radius + c.cx;
-        const z = Math.sin(c.angle) * (c.radius * 0.28) + c.cz;
-        c.mesh.position.set(x, 0, z);
-        c.mesh.rotation.y = -c.angle + Math.PI / 2;
+        const along = Math.sin(c.angle) * c.radius;
+        const dir = Math.cos(c.angle) >= 0 ? 1 : -1;
+        if (c.axis === 'x') {
+          c.mesh.position.set(c.cx + along, 0, c.cz + c.lane);
+          c.mesh.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+        } else {
+          c.mesh.position.set(c.cx + c.lane, 0, c.cz + along);
+          c.mesh.rotation.y = dir > 0 ? 0 : Math.PI;
+        }
       });
       refs.peds.forEach((p) => {
         p.angle += p.speed * dt;
@@ -651,9 +657,15 @@ class Engine {
       });
     }
 
+    // Touch move-stick deflection scales speed continuously instead of
+    // being all-or-nothing; keyboard never touches touch.magnitude, so it
+    // stays 0 and moveScale falls back to full speed for key-based input.
+    const moveMag = input.touch.magnitude;
+    const moveScale = moveMag > 0 ? moveMag : 1;
+
     // ---- car ----
     if (this.inCar && this.car) {
-      const acc = (input.isHeld('move-forward') ? 16 : 0) - (input.isHeld('move-back') ? 14 : 0);
+      const acc = ((input.isHeld('move-forward') ? 16 : 0) - (input.isHeld('move-back') ? 14 : 0)) * moveScale;
       const brake = input.isHeld('handbrake') ? 0.9 : 0;
       this.carSpeed += acc * dt;
       this.carSpeed *= 1 - (0.6 + brake * 4) * dt;
@@ -675,7 +687,7 @@ class Engine {
     } else {
       sfx.engine(false);
       // ---- player ----
-      const speed = (this.camMode ? 2.2 : run ? 6.2 : 3.1);
+      const speed = (this.camMode ? 2.2 : run ? 6.2 : 3.1) * moveScale;
       const fwd = (input.isHeld('move-forward') ? 1 : 0) - (input.isHeld('move-back') ? 1 : 0);
       const strafe = (input.isHeld('move-right') ? 1 : 0) - (input.isHeld('move-left') ? 1 : 0);
       const dir = new THREE.Vector3();
