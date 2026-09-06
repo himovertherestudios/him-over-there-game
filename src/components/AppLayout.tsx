@@ -1,10 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { Crown, Play, RotateCcw, Keyboard, Camera, Map, Smartphone, Wallet } from 'lucide-react';
 import { Cinematic, CONTROLS } from './game/TitleScreen';
-import { GameScreen } from './game/GameScreen';
 import { useGame, getState, set, newGame, loadGame, hasSave, makeInquiry, pushInquiry, say, track } from '@/game/store';
 import { sfx } from '@/game/audio';
 import { IMG } from '@/game/imgs';
+
+// GameScreen pulls in the three.js engine, world builder, and every gameplay
+// UI panel — real weight the title/intro screens never need. Loading it as
+// its own chunk keeps the first paint light; loadGameScreen() below is also
+// called as soon as the intro cinematic starts so it's typically already
+// cached by the time the player reaches actual gameplay.
+const loadGameScreen = () => import('./game/GameScreen');
+const GameScreen = lazy(() => loadGameScreen().then((m) => ({ default: m.GameScreen })));
+
+const GameLoading: React.FC = () => (
+  <div className="flex h-screen w-full items-center justify-center bg-black">
+    <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-amber-400/80">Loading Bronzewood&hellip;</p>
+  </div>
+);
 
 const FEATURES: { icon: React.ElementType; title: string; body: string }[] = [
   { icon: Camera, title: 'Real photography', body: 'Aperture, shutter, ISO, focal length, focus and white balance change the frame you actually capture. Missed focus stays missed.' },
@@ -19,6 +32,11 @@ const AppLayout: React.FC = () => {
   const [showControls, setShowControls] = useState(false);
 
   useEffect(() => { setSaveExists(hasSave()); }, [screen]);
+
+  // Warm the GameScreen chunk during the cinematic so it's ready by the time
+  // the intro ends and 'play' actually needs it (no visible loading state
+  // in the common path — only a slow network would still see the fallback).
+  useEffect(() => { if (screen === 'intro') loadGameScreen(); }, [screen]);
 
   // First mission trigger: Tasha texts as soon as the apartment loads.
   useEffect(() => {
@@ -63,7 +81,11 @@ const AppLayout: React.FC = () => {
   }
 
   if (screen === 'play') {
-    return <GameScreen onQuit={() => set({ screen: 'title' })} />;
+    return (
+      <Suspense fallback={<GameLoading />}>
+        <GameScreen onQuit={() => set({ screen: 'title' })} />
+      </Suspense>
+    );
   }
 
   // ---------------- TITLE SCREEN ----------------
