@@ -7,6 +7,13 @@
 export type Genre = 'Portrait' | 'Beauty' | 'Boudoir' | 'Branding';
 export type LotKind = 'home' | 'studio' | 'shop' | 'cafe' | 'bar' | 'clothes' | 'client' | 'outdoor' | 'park';
 
+// ---- camera setting option lists (shared by desktop CameraHUD and mobile controls) ----
+export const APERTURES = [1.4, 1.8, 2.8, 4, 5.6, 8, 11, 16];
+export const SHUTTERS = [1 / 8, 1 / 15, 1 / 30, 1 / 60, 1 / 125, 1 / 250, 1 / 500, 1 / 1000, 1 / 4000];
+export const ISOS = [100, 200, 400, 800, 1600, 3200, 6400, 12800];
+export const WBS = ['Auto', 'Daylight', 'Shade', 'Tungsten', 'Flash'];
+export const fmtShutter = (s: number) => (s >= 1 ? `${s}"` : `1/${Math.round(1 / s)}`);
+
 export interface Lot {
   id: string;
   name: string;
