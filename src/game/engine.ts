@@ -6,6 +6,8 @@ import {
 import { LOTS, PARKING, archetypeById } from './data';
 import { getState, ShotSettings } from './store';
 import { sfx } from './audio';
+import { input } from './input/InputManager';
+import { getDeviceProfile } from './platform/device';
 
 export interface Hud {
   prompt: string | null;
@@ -73,7 +75,6 @@ class Engine {
   cam: CamState = { aperture: 4, shutter: 1 / 250, iso: 400, focal: 35, focus: 3, wb: 'Auto', kelvin: 5500, portrait: false, height: 1.55, grid: true };
   camMode = false;
 
-  keys = new Set<string>();
   paused = false;
   running = false;
   raf = 0;
@@ -81,21 +82,36 @@ class Engine {
   trainT = 24;
   lastHud = '';
   noise: HTMLCanvasElement | null = null;
+  /** 0 = uncapped (desktop). Mobile targets ~30fps to save battery/GPU. */
+  frameInterval = 0;
+  frameAccum = 0;
+  /** Rendered (post-throttle) frames per second, sampled via wall-clock time. */
+  fps = 0;
+  private fpsWindowStart = 0;
+  private fpsFrames = 0;
 
   onHud: ((h: Hud) => void) | null = null;
   onInteract: ((id: string) => void) | null = null;
   onCamChange: (() => void) | null = null;
-  onKey: ((k: string) => void) | null = null;
 
   // ---------------------------------------------------------
   mount(canvas: HTMLCanvasElement, fx: HTMLCanvasElement) {
     this.canvas = canvas;
     this.fx = fx;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, alpha: true });
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Antialiasing can only be set at WebGL context creation, so the quality
+    // tier at mount time sticks for the session (switching quality later
+    // still updates shadows/fog/DPR live via resize()).
+    // preserveDrawingBuffer is a real perf cost (forces an extra buffer copy
+    // most frames) and isn't needed here: the only readback is capture()'s
+    // camera-mode composite, which drawImage()s this canvas synchronously
+    // right after render() in the same call — before the browser would ever
+    // clear the buffer — so the pixels are always still there to read.
+    const q = getState().quality;
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: q !== 'low', alpha: true });
     this.scene.background = new THREE.Color(0x1a1c22);
     this.scene.fog = new THREE.Fog(0x1a1c22, 90, 260);
+    this.frameInterval = getDeviceProfile().isMobile ? 1 / 30 : 0;
+    this.fpsWindowStart = performance.now();
 
     this.player = buildCharacter({ fit: getState().fit, locsTied: getState().locsTied });
     this.scene.add(this.player.group);
@@ -113,8 +129,7 @@ class Engine {
     }
     nctx.putImageData(img, 0, 0);
 
-    window.addEventListener('keydown', this.keyDown);
-    window.addEventListener('keyup', this.keyUp);
+    input.attachKeyboard();
     canvas.addEventListener('pointerdown', this.pointerDown);
     window.addEventListener('pointerup', this.pointerUp);
     window.addEventListener('pointermove', this.pointerMove);
@@ -129,8 +144,7 @@ class Engine {
   unmount() {
     this.running = false;
     cancelAnimationFrame(this.raf);
-    window.removeEventListener('keydown', this.keyDown);
-    window.removeEventListener('keyup', this.keyUp);
+    input.detachKeyboard();
     window.removeEventListener('pointerup', this.pointerUp);
     window.removeEventListener('pointermove', this.pointerMove);
     window.removeEventListener('resize', this.resize);
@@ -151,22 +165,25 @@ class Engine {
     const w = window.innerWidth, h = window.innerHeight;
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(w, h, false);
+
+    // Shadows/fog/draw-distance scale with quality; unlike antialiasing these
+    // can change live, so a quality switch mid-session applies immediately.
+    // Fog near/far are mutated in place (not replaced) so its color —
+    // continuously updated per frame for day/night/weather — never resets.
+    this.renderer.shadowMap.enabled = q !== 'low';
+    this.renderer.shadowMap.type = q === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    if (this.scene.fog && 'near' in this.scene.fog) {
+      this.scene.fog.near = q === 'low' ? 45 : 90;
+      this.scene.fog.far = q === 'low' ? 140 : 260;
+    }
+    this.camera.far = q === 'low' ? 300 : 600;
+
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     if (this.fx) { this.fx.width = Math.min(1280, w); this.fx.height = Math.min(1280, w) * (h / w); }
   };
 
   // ---------------------------------------------------------
-  keyDown = (e: KeyboardEvent) => {
-    const tag = (e.target as HTMLElement)?.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-    const k = e.key.toLowerCase();
-    if ([' ', 'tab', 'e', 'c', 'w', 'a', 's', 'd', 'r'].includes(k)) e.preventDefault();
-    this.keys.add(k);
-    this.onKey?.(k);
-  };
-  keyUp = (e: KeyboardEvent) => { this.keys.delete(e.key.toLowerCase()); };
-
   dragging = false; lastX = 0; lastY = 0;
   pointerDown = (e: PointerEvent) => {
     this.dragging = true; this.lastX = e.clientX; this.lastY = e.clientY;
@@ -394,6 +411,7 @@ class Engine {
     if (this.inCar) {
       return { id: 'exitcar', label: 'Exit the Keystone Sedan' };
     }
+    if (!this.current) return null;
     const p = this.playerPos;
     if (this.currentId === 'district') {
       const refs = this.current!.refs as WorldRefs;
@@ -453,7 +471,31 @@ class Engine {
   loop = () => {
     if (!this.running) return;
     this.raf = requestAnimationFrame(this.loop);
-    const dt = Math.min(0.05, this.clock.getDelta());
+    const rawDt = Math.min(0.05, this.clock.getDelta());
+
+    // Mobile targets ~30fps: skip frames until enough real time has passed,
+    // then step by the fixed target interval rather than the accumulated
+    // (possibly larger) gap, so movement speed stays consistent.
+    let dt = rawDt;
+    if (this.frameInterval > 0) {
+      this.frameAccum += rawDt;
+      if (this.frameAccum < this.frameInterval) return;
+      this.frameAccum = 0;
+      dt = this.frameInterval;
+    }
+
+    // FPS is measured over real wall-clock time between rendered frames, so
+    // it reflects the effective output rate whether or not throttling above
+    // is active (rawDt/dt alone can't tell us how many ticks were skipped).
+    const now = performance.now();
+    this.fpsFrames += 1;
+    const elapsed = now - this.fpsWindowStart;
+    if (elapsed >= 500) {
+      this.fps = Math.round((this.fpsFrames * 1000) / elapsed);
+      this.fpsWindowStart = now;
+      this.fpsFrames = 0;
+    }
+
     const t = this.clock.elapsedTime;
     if (!this.paused) this.update(dt, t);
     this.render(t);
@@ -462,8 +504,7 @@ class Engine {
   };
 
   update(dt: number, t: number) {
-    const K = this.keys;
-    const run = K.has('shift');
+    const run = input.isHeld('sprint');
 
     // ---- day/night + weather ----
     const s = getState();
@@ -483,7 +524,6 @@ class Engine {
       refs.streetLights.forEach((l) => { l.intensity = night ? 1.15 : 0; });
       refs.windowMats.forEach((m, i) => { m.color.setHex(night ? (i % 3 === 0 ? 0x2a3040 : 0xffdc9e) : 0x27303c); });
       refs.roadMat.color.setHex(s.weather === 'rain' ? 0x22232a : s.weather === 'snow' ? 0x6a6c70 : 0x35343a);
-      refs.ground.material = refs.ground.material;
       (refs.ground.material as THREE.MeshLambertMaterial).color.setHex(s.weather === 'snow' ? 0xcfd4d8 : s.weather === 'rain' ? 0x46443f : 0x5d5b56);
 
       // rain / snow
@@ -532,12 +572,12 @@ class Engine {
 
     // ---- car ----
     if (this.inCar && this.car) {
-      const acc = (K.has('w') ? 16 : 0) - (K.has('s') ? 14 : 0);
-      const brake = K.has(' ') ? 0.9 : 0;
+      const acc = (input.isHeld('move-forward') ? 16 : 0) - (input.isHeld('move-back') ? 14 : 0);
+      const brake = input.isHeld('handbrake') ? 0.9 : 0;
       this.carSpeed += acc * dt;
       this.carSpeed *= 1 - (0.6 + brake * 4) * dt;
       this.carSpeed = Math.max(-9, Math.min(26, this.carSpeed));
-      const steer = (K.has('a') ? 1 : 0) - (K.has('d') ? 1 : 0);
+      const steer = (input.isHeld('move-left') ? 1 : 0) - (input.isHeld('move-right') ? 1 : 0);
       this.carRot += steer * dt * 1.5 * Math.min(1, Math.abs(this.carSpeed) / 6) * Math.sign(this.carSpeed || 1);
       const next = this.carPos.clone();
       next.x += Math.sin(this.carRot) * this.carSpeed * dt;
@@ -555,8 +595,8 @@ class Engine {
       sfx.engine(false);
       // ---- player ----
       const speed = (this.camMode ? 2.2 : run ? 6.2 : 3.1);
-      const fwd = (K.has('w') ? 1 : 0) - (K.has('s') ? 1 : 0);
-      const strafe = (K.has('d') ? 1 : 0) - (K.has('a') ? 1 : 0);
+      const fwd = (input.isHeld('move-forward') ? 1 : 0) - (input.isHeld('move-back') ? 1 : 0);
+      const strafe = (input.isHeld('move-right') ? 1 : 0) - (input.isHeld('move-left') ? 1 : 0);
       const dir = new THREE.Vector3();
       if (fwd || strafe) {
         const camDir = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
@@ -644,7 +684,6 @@ class Engine {
     // pass A: full scene
     this.camera.layers.enableAll();
     this.renderer.setClearAlpha(1);
-    this.scene.background = this.scene.background;
     this.renderer.render(this.scene, this.camera);
 
     const subjDist = this.subject ? this.camera.position.distanceTo(this.subjectHeadPos()) : c.focus;

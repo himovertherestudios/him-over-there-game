@@ -2,17 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Aperture, Timer, Gauge, Focus, Sun, RotateCw, Grid3x3, Lightbulb, Users, X, Camera } from 'lucide-react';
 import { engine } from '@/game/engine';
 import { useGame, getState } from '@/game/store';
-import { DIRECTIONS } from '@/game/data';
+import { DIRECTIONS, APERTURES, SHUTTERS, ISOS, WBS, fmtShutter } from '@/game/data';
 import { directSubject } from '@/game/actions';
 import { Btn, Chip, cx } from './ui';
 import { sfx } from '@/game/audio';
-
-const APERTURES = [1.4, 1.8, 2.8, 4, 5.6, 8, 11, 16];
-const SHUTTERS = [1 / 8, 1 / 15, 1 / 30, 1 / 60, 1 / 125, 1 / 250, 1 / 500, 1 / 1000, 1 / 4000];
-const ISOS = [100, 200, 400, 800, 1600, 3200, 6400, 12800];
-const WBS = ['Auto', 'Daylight', 'Shade', 'Tungsten', 'Flash'];
-
-const fmtShutter = (s: number) => (s >= 1 ? `${s}"` : `1/${Math.round(1 / s)}`);
+import { useDeviceProfile } from '@/game/platform/device';
+import { MobileCameraControls } from './mobile/MobileCameraControls';
 
 const Stepper: React.FC<{
   icon: React.ElementType; label: string; value: string; onPrev: () => void; onNext: () => void; tone?: string;
@@ -35,6 +30,7 @@ export const CameraHUD: React.FC<{ onCapture: () => void; onExit: () => void; sh
   const [tab, setTab] = useState<'cam' | 'light' | 'direct'>('cam');
   const job = useGame((s) => s.job);
   const [tip, setTip] = useState<string | null>('Closer light = softer light, faster falloff.');
+  const device = useDeviceProfile();
 
   useEffect(() => {
     engine.onCamChange = () => force((v) => v + 1);
@@ -112,25 +108,33 @@ export const CameraHUD: React.FC<{ onCapture: () => void; onExit: () => void; sh
 
         <div className="rounded-lg border border-white/12 bg-black/85 p-3 backdrop-blur">
           {tab === 'cam' && (
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <Stepper icon={Aperture} label="Aperture" value={`f/${c.aperture}`} onPrev={() => engine.setCam({ aperture: step(APERTURES, c.aperture, -1) })} onNext={() => engine.setCam({ aperture: step(APERTURES, c.aperture, 1) })} />
-              <Stepper icon={Timer} label="Shutter" value={fmtShutter(c.shutter)} tone={c.shutter > 1 / 125 ? 'text-red-400' : 'text-amber-300'} onPrev={() => engine.setCam({ shutter: step(SHUTTERS, c.shutter, -1) })} onNext={() => engine.setCam({ shutter: step(SHUTTERS, c.shutter, 1) })} />
-              <Stepper icon={Gauge} label="ISO" value={`${c.iso}`} tone={c.iso > 3200 ? 'text-red-400' : 'text-amber-300'} onPrev={() => engine.setCam({ iso: step(ISOS, c.iso, -1) })} onNext={() => engine.setCam({ iso: step(ISOS, c.iso, 1) })} />
-              <Stepper icon={Focus} label="Focal" value={`${c.focal}mm`} onPrev={() => engine.setCam({ focal: Math.max(24, c.focal - 5) })} onNext={() => engine.setCam({ focal: Math.min(getState().ownedGear.includes('lens-85') ? 85 : 70, c.focal + 5) })} />
-              <Stepper icon={Focus} label="Focus" value={`${c.focus.toFixed(2)}m`} onPrev={() => engine.setCam({ focus: Math.max(0.4, c.focus - 0.1) })} onNext={() => engine.setCam({ focus: Math.min(20, c.focus + 0.1) })} />
-              <Stepper icon={Sun} label="WB" value={c.wb === 'Auto' ? 'Auto' : `${c.kelvin}K`} onPrev={() => engine.setCam({ wb: step(WBS, c.wb, -1) })} onNext={() => engine.setCam({ wb: step(WBS, c.wb, 1) })} />
-              <Stepper icon={Sun} label="Kelvin" value={`${c.kelvin}K`} onPrev={() => engine.setCam({ kelvin: Math.max(2500, c.kelvin - 250) })} onNext={() => engine.setCam({ kelvin: Math.min(9000, c.kelvin + 250) })} />
-              <Btn size="sm" onClick={() => engine.setCam({ portrait: !c.portrait })}><RotateCw className="h-3 w-3" /> {c.portrait ? 'Portrait' : 'Landscape'}</Btn>
-              <Btn size="sm" onClick={() => engine.setCam({ grid: !c.grid })}><Grid3x3 className="h-3 w-3" /> Thirds {c.grid ? 'on' : 'off'}</Btn>
-              <Btn size="sm" onClick={() => engine.setCam({ height: c.height <= 1.1 ? 1.55 : c.height >= 1.9 ? 1.1 : 2.0 })}>Height {c.height <= 1.1 ? 'Low' : c.height >= 1.9 ? 'High' : 'Eye'}</Btn>
+            <div className="flex flex-col items-center gap-2">
+              {device.isMobile ? (
+                <MobileCameraControls c={c} />
+              ) : (
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Stepper icon={Aperture} label="Aperture" value={`f/${c.aperture}`} onPrev={() => engine.setCam({ aperture: step(APERTURES, c.aperture, -1) })} onNext={() => engine.setCam({ aperture: step(APERTURES, c.aperture, 1) })} />
+                  <Stepper icon={Timer} label="Shutter" value={fmtShutter(c.shutter)} tone={c.shutter > 1 / 125 ? 'text-red-400' : 'text-amber-300'} onPrev={() => engine.setCam({ shutter: step(SHUTTERS, c.shutter, -1) })} onNext={() => engine.setCam({ shutter: step(SHUTTERS, c.shutter, 1) })} />
+                  <Stepper icon={Gauge} label="ISO" value={`${c.iso}`} tone={c.iso > 3200 ? 'text-red-400' : 'text-amber-300'} onPrev={() => engine.setCam({ iso: step(ISOS, c.iso, -1) })} onNext={() => engine.setCam({ iso: step(ISOS, c.iso, 1) })} />
+                  <Stepper icon={Focus} label="Focal" value={`${c.focal}mm`} onPrev={() => engine.setCam({ focal: Math.max(24, c.focal - 5) })} onNext={() => engine.setCam({ focal: Math.min(getState().ownedGear.includes('lens-85') ? 85 : 70, c.focal + 5) })} />
+                  <Stepper icon={Focus} label="Focus" value={`${c.focus.toFixed(2)}m`} onPrev={() => engine.setCam({ focus: Math.max(0.4, c.focus - 0.1) })} onNext={() => engine.setCam({ focus: Math.min(20, c.focus + 0.1) })} />
+                  <Stepper icon={Sun} label="WB" value={c.wb === 'Auto' ? 'Auto' : `${c.kelvin}K`} onPrev={() => engine.setCam({ wb: step(WBS, c.wb, -1) })} onNext={() => engine.setCam({ wb: step(WBS, c.wb, 1) })} />
+                  <Stepper icon={Sun} label="Kelvin" value={`${c.kelvin}K`} onPrev={() => engine.setCam({ kelvin: Math.max(2500, c.kelvin - 250) })} onNext={() => engine.setCam({ kelvin: Math.min(9000, c.kelvin + 250) })} />
+                </div>
+              )}
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Btn size={device.isMobile ? 'md' : 'sm'} className={device.isMobile ? 'h-11 px-4' : undefined} onClick={() => engine.setCam({ portrait: !c.portrait })}><RotateCw className="h-3 w-3" /> {c.portrait ? 'Portrait' : 'Landscape'}</Btn>
+                <Btn size={device.isMobile ? 'md' : 'sm'} className={device.isMobile ? 'h-11 px-4' : undefined} onClick={() => engine.setCam({ grid: !c.grid })}><Grid3x3 className="h-3 w-3" /> Thirds {c.grid ? 'on' : 'off'}</Btn>
+                <Btn size={device.isMobile ? 'md' : 'sm'} className={device.isMobile ? 'h-11 px-4' : undefined} onClick={() => engine.setCam({ height: c.height <= 1.1 ? 1.55 : c.height >= 1.9 ? 1.1 : 2.0 })}>Height {c.height <= 1.1 ? 'Low' : c.height >= 1.9 ? 'High' : 'Eye'}</Btn>
+              </div>
             </div>
           )}
 
           {tab === 'light' && (
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <div className={cx('grid grid-cols-2 gap-4', !device.isMobile && 'md:grid-cols-4')}>
               <label className="block">
                 <span className="mb-1 flex justify-between font-mono text-[9px] uppercase tracking-wider text-stone-400"><span>Power</span><span className="text-amber-300">1/{Math.round(1 / Math.max(0.015, L.power))}</span></span>
-                <input aria-label="Light power" type="range" min={0.015} max={1} step={0.015} value={L.power} onChange={(e) => engine.setLight({ power: parseFloat(e.target.value) })} className="w-full accent-amber-400" />
+                <input aria-label="Light power" type="range" min={0.015} max={1} step={0.015} value={L.power} onChange={(e) => engine.setLight({ power: parseFloat(e.target.value) })} className={cx('w-full accent-amber-400', device.isMobile && 'h-3')} />
               </label>
               <label className="block">
                 <span className="mb-1 flex justify-between font-mono text-[9px] uppercase tracking-wider text-stone-400"><span>Distance</span><span className="text-amber-300">{engine.lightDistance().toFixed(1)}m</span></span>
@@ -143,7 +147,7 @@ export const CameraHUD: React.FC<{ onCapture: () => void; onExit: () => void; sh
                     engine.setLight({ x: engine.subjectPos.x + Math.cos(a) * d, z: engine.subjectPos.z + Math.sin(a) * d });
                     setTip('Closer light = softer light, faster falloff.');
                   }}
-                  className="w-full accent-amber-400"
+                  className={cx('w-full accent-amber-400', device.isMobile && 'h-3')}
                 />
               </label>
               <label className="block">
@@ -156,12 +160,12 @@ export const CameraHUD: React.FC<{ onCapture: () => void; onExit: () => void; sh
                     engine.setLight({ angle: a, x: engine.subjectPos.x + Math.cos(a) * d, z: engine.subjectPos.z + Math.sin(a) * d });
                     setTip('45\u00b0 off the nose and a little above = Rembrandt. Straight on = flat.');
                   }}
-                  className="w-full accent-amber-400"
+                  className={cx('w-full accent-amber-400', device.isMobile && 'h-3')}
                 />
               </label>
               <label className="block">
                 <span className="mb-1 flex justify-between font-mono text-[9px] uppercase tracking-wider text-stone-400"><span>Height</span><span className="text-amber-300">{L.height.toFixed(1)}m</span></span>
-                <input aria-label="Light height" type="range" min={0.8} max={3} step={0.1} value={L.height} onChange={(e) => engine.setLight({ height: parseFloat(e.target.value) })} className="w-full accent-amber-400" />
+                <input aria-label="Light height" type="range" min={0.8} max={3} step={0.1} value={L.height} onChange={(e) => engine.setLight({ height: parseFloat(e.target.value) })} className={cx('w-full accent-amber-400', device.isMobile && 'h-3')} />
               </label>
               <div className="col-span-2 flex flex-wrap items-center gap-2 md:col-span-4">
                 <Btn size="sm" variant={L.on ? 'gold' : 'dark'} onClick={() => engine.setLight({ on: !L.on })}>{L.on ? 'Strobe ON' : 'Strobe OFF'}</Btn>
@@ -202,14 +206,28 @@ export const CameraHUD: React.FC<{ onCapture: () => void; onExit: () => void; sh
           )}
 
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/10 pt-2">
-            <p className="font-mono text-[9px] uppercase tracking-wider text-stone-600">
-              WASD move &middot; drag to aim &middot; wheel = focus &middot; shift+wheel = zoom &middot; click subject = autofocus
-            </p>
+            {!device.isMobile && (
+              <p className="font-mono text-[9px] uppercase tracking-wider text-stone-600">
+                WASD move &middot; drag to aim &middot; wheel = focus &middot; shift+wheel = zoom &middot; click subject = autofocus
+              </p>
+            )}
+            {device.isMobile && (
+              <p className="font-mono text-[9px] uppercase tracking-wider text-stone-600">
+                Drag to aim &middot; tap subject to autofocus
+              </p>
+            )}
             <div className="flex items-center gap-2">
-              <Btn variant="gold" size="lg" onClick={onCapture} disabled={shots >= maxShots}>
-                <Camera className="h-4 w-4" /> Shoot (Space)
+              <Btn
+                variant="gold"
+                size={device.isMobile ? undefined : 'lg'}
+                onClick={onCapture}
+                disabled={shots >= maxShots}
+                className={device.isMobile ? 'h-16 w-16 rounded-full !p-0' : undefined}
+              >
+                <Camera className={device.isMobile ? 'h-6 w-6' : 'h-4 w-4'} />
+                {!device.isMobile && 'Shoot (Space)'}
               </Btn>
-              <Btn variant="ghost" onClick={onExit}><X className="h-3.5 w-3.5" /> Lower camera (C)</Btn>
+              <Btn variant="ghost" onClick={onExit}><X className="h-3.5 w-3.5" /> Lower camera{!device.isMobile && ' (C)'}</Btn>
             </div>
           </div>
         </div>

@@ -3,6 +3,11 @@ import {
   Battery, Brain, Star, DollarSign, Utensils, Sparkles, Navigation, Smartphone, Crown, Camera as CamIcon, MapPin, Menu,
 } from 'lucide-react';
 import { engine, Hud } from '@/game/engine';
+import { input } from '@/game/input/InputManager';
+import { useDeviceProfile } from '@/game/platform/device';
+import { MobileControls } from './mobile/MobileControls';
+import { RotateOverlay } from './mobile/RotateOverlay';
+import { DebugOverlay } from './DebugOverlay';
 import {
   useGame, getState, set, advanceTime, stat, say, saveGame, scoreShot, addPhoto, updateJob,
   learn, fmtMoney, fmtClock, MISSION_STEPS, setMission, completeMission, checkStudioUnlock, leaseStudio,
@@ -38,6 +43,7 @@ export const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
   const [wpArrow, setWpArrow] = useState<{ x: number; y: number; behind: boolean; dist: number } | null>(null);
   const s = useGame((g) => g);
   const shotsThisJob = s.photos.filter((p) => p.jobId === s.job?.id).length;
+  const device = useDeviceProfile();
 
   // ---------------- mount ----------------
   useEffect(() => {
@@ -50,7 +56,7 @@ export const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
     return () => { engine.onHud = null; engine.unmount(); };
   }, []);
 
-  useEffect(() => { engine.paused = paused || phone || !!overlay || !!mishap; }, [paused, phone, overlay, mishap]);
+  useEffect(() => { engine.paused = paused || phone || !!overlay || !!mishap || device.isPortraitPhone; }, [paused, phone, overlay, mishap, device.isPortraitPhone]);
 
   // ---------------- capture ----------------
   const capture = useCallback(() => {
@@ -172,32 +178,28 @@ export const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
     }
   }, []);
 
-  // ---------------- keys ----------------
+  // ---------------- semantic actions (keyboard + touch) ----------------
   useEffect(() => {
-    const last: Record<string, number> = {};
-    engine.onKey = (k) => {
-      const now = performance.now();
-      if (last[k] && now - last[k] < 250) return;
-      last[k] = now;
-      if (k === 'tab') { setPhone((v) => !v); setPaused(false); sfx.click(); return; }
-      if (k === 'escape') { setPaused((v) => !v); setPhone(false); sfx.click(); return; }
-      if (k === 'e') {
+    const unsubscribe = input.onPress((action) => {
+      if (action === 'toggle-phone') { setPhone((v) => !v); setPaused(false); sfx.click(); return; }
+      if (action === 'pause') { setPaused((v) => !v); setPhone(false); sfx.click(); return; }
+      if (action === 'interact') {
         if (getState().screen !== 'play') return;
         if (phoneRef.current || overlayRef.current || mishapRef.current || pausedRef.current) return;
         interact(engine.interactTarget()?.id ?? null);
         return;
       }
-      if (k === 'c') {
+      if (action === 'toggle-camera') {
         const job = getState().job;
         if (!engine.subject || !job) { say('Camera comes up at a shoot.'); return; }
         if (engine.camMode) engine.exitCameraMode();
         else { engine.enterCameraMode(); setMission(8); }
         return;
       }
-      if (k === ' ' && engine.camMode) capture();
-      if (k === 'm') saveGame();
-    };
-    return () => { engine.onKey = null; };
+      if (action === 'capture-photo' && engine.camMode) capture();
+      if (action === 'save-game') saveGame();
+    });
+    return unsubscribe;
   }, [interact, capture]);
 
   const phoneRef = useRef(false); const overlayRef = useRef<string | null>(null);
@@ -301,8 +303,11 @@ export const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
       {flash && <div className="absolute inset-0 z-30 bg-black" />}
 
       {/* ---------- TOP BAR ---------- */}
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between p-3">
-        <div className="pointer-events-auto max-w-sm rounded-lg border border-white/10 bg-black/70 p-3 backdrop-blur">
+      <header
+        className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between p-3"
+        style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+      >
+        <div className="pointer-events-auto max-w-[min(24rem,58vw)] rounded-lg border border-white/10 bg-black/70 p-3 backdrop-blur">
           <p className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.2em] text-amber-400">
             <Crown className="h-3 w-3" /> {s.missionDone ? 'Objectives' : 'Mission: How much you charge?'}
           </p>
@@ -322,19 +327,23 @@ export const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
             {statItem(Battery, 'Energy', `${Math.round(s.energy)}`, s.energy < 25 ? 'text-red-400' : 'text-emerald-400')}
             {statItem(Brain, 'Stress', `${Math.round(s.stress)}`, s.stress > 70 ? 'text-red-400' : 'text-sky-400')}
             {statItem(Star, 'Reputation', `${Math.round(s.rep)}`, 'text-amber-400')}
-            {statItem(Sparkles, 'Creativity', `${Math.round(s.creativity)}`, 'text-fuchsia-400')}
-            {statItem(Utensils, 'Hunger', `${Math.round(s.hunger)}`, s.hunger < 25 ? 'text-red-400' : 'text-orange-300')}
+            {!device.isMobile && statItem(Sparkles, 'Creativity', `${Math.round(s.creativity)}`, 'text-fuchsia-400')}
+            {!device.isMobile && statItem(Utensils, 'Hunger', `${Math.round(s.hunger)}`, s.hunger < 25 ? 'text-red-400' : 'text-orange-300')}
           </div>
-          <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/70 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-stone-400 backdrop-blur">
-            <span className="text-amber-300">{titleFor(s.rep)}</span>
-            <span>&middot;</span><span>Day {s.day}</span>
-            <span>&middot;</span><span>{fmtClock(s.clock)}</span>
-            <span>&middot;</span><span className="capitalize">{s.weather}</span>
-          </div>
-          <div className="flex gap-1.5">
-            <Btn size="sm" onClick={() => { setPhone((v) => !v); }}><Smartphone className="h-3 w-3" /> Phone (Tab)</Btn>
-            <Btn size="sm" onClick={() => setPaused(true)}><Menu className="h-3 w-3" /> Pause (Esc)</Btn>
-          </div>
+          {!device.isMobile && (
+            <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/70 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-stone-400 backdrop-blur">
+              <span className="text-amber-300">{titleFor(s.rep)}</span>
+              <span>&middot;</span><span>Day {s.day}</span>
+              <span>&middot;</span><span>{fmtClock(s.clock)}</span>
+              <span>&middot;</span><span className="capitalize">{s.weather}</span>
+            </div>
+          )}
+          {!device.isMobile && (
+            <div className="flex gap-1.5">
+              <Btn size="sm" onClick={() => { setPhone((v) => !v); }}><Smartphone className="h-3 w-3" /> Phone (Tab)</Btn>
+              <Btn size="sm" onClick={() => setPaused(true)}><Menu className="h-3 w-3" /> Pause (Esc)</Btn>
+            </div>
+          )}
         </div>
       </header>
 
@@ -359,21 +368,28 @@ export const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
       )}
 
       {/* ---------- MINIMAP ---------- */}
-      <div className="pointer-events-none absolute bottom-4 left-4 z-10">
-        <div className="overflow-hidden rounded-lg border border-white/12 bg-black/70 backdrop-blur">
-          <canvas ref={miniRef} width={168} height={168} className="block" />
-          <div className="flex items-center justify-between border-t border-white/10 px-2 py-1 font-mono text-[8.5px] uppercase tracking-widest text-stone-500">
-            <span>Bronzewood</span>
-            <span className={hud.parked ? 'text-emerald-400' : 'text-red-400'}>{hud.inCar ? `${Math.round(hud.speed * 2.2)} mph` : hud.parked ? 'parked' : 'not parked'}</span>
+      {!(device.isMobile && hud.camMode) && (
+        <div
+          className="pointer-events-none absolute left-3 z-10"
+          style={{ bottom: device.isMobile ? 'calc(env(safe-area-inset-bottom) + 7.5rem)' : '1rem' }}
+        >
+          <div className="overflow-hidden rounded-lg border border-white/12 bg-black/70 backdrop-blur">
+            <canvas ref={miniRef} width={device.isMobile ? 116 : 168} height={device.isMobile ? 116 : 168} className="block" />
+            <div className="flex items-center justify-between border-t border-white/10 px-2 py-1 font-mono text-[8.5px] uppercase tracking-widest text-stone-500">
+              <span>Bronzewood</span>
+              <span className={hud.parked ? 'text-emerald-400' : 'text-red-400'}>{hud.inCar ? `${Math.round(hud.speed * 2.2)} mph` : hud.parked ? 'parked' : 'not parked'}</span>
+            </div>
           </div>
+          {!device.isMobile && (
+            <p className="mt-1.5 max-w-[168px] font-mono text-[8.5px] leading-relaxed text-stone-500">
+              WASD move &middot; Shift run &middot; E interact &middot; Tab phone &middot; C camera &middot; Esc pause
+            </p>
+          )}
         </div>
-        <p className="mt-1.5 max-w-[168px] font-mono text-[8.5px] leading-relaxed text-stone-500">
-          WASD move &middot; Shift run &middot; E interact &middot; Tab phone &middot; C camera &middot; Esc pause
-        </p>
-      </div>
+      )}
 
-      {/* ---------- INTERACT PROMPT ---------- */}
-      {hud.prompt && !hud.camMode && !phone && (
+      {/* ---------- INTERACT PROMPT (desktop keyboard hint; mobile has its own Interact button) ---------- */}
+      {hud.prompt && !hud.camMode && !phone && !device.isMobile && (
         <div className="pointer-events-none absolute bottom-28 left-1/2 z-10 -translate-x-1/2">
           <div className="flex items-center gap-2 rounded-md border border-amber-400/40 bg-black/80 px-3 py-1.5 backdrop-blur">
             <kbd className="rounded bg-amber-400 px-1.5 py-0.5 font-mono text-[10px] font-bold text-black">E</kbd>
@@ -382,9 +398,8 @@ export const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
         </div>
       )}
 
-      {/* ---------- CAMERA CTA ---------- */}
-      {hud.hasSubject && !hud.camMode && !phone && (
-
+      {/* ---------- CAMERA CTA (desktop keyboard hint; mobile has its own Camera button) ---------- */}
+      {hud.hasSubject && !hud.camMode && !phone && !device.isMobile && (
         <div className="pointer-events-none absolute bottom-16 left-1/2 z-10 -translate-x-1/2">
           <div className="flex items-center gap-2 rounded-md border border-white/15 bg-black/70 px-3 py-1.5">
             <kbd className="rounded bg-white/15 px-1.5 py-0.5 font-mono text-[10px] text-stone-200">C</kbd>
@@ -468,6 +483,11 @@ export const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
 
       {mishap && <MishapModal mishap={mishap} onDone={() => setMishap(null)} />}
       {paused && <PauseMenu onClose={() => setPaused(false)} onQuit={onQuit} />}
+
+      {/* ---------- MOBILE TOUCH CONTROLS ---------- */}
+      {device.isMobile && !phone && !overlay && !mishap && !paused && !device.isPortraitPhone && <MobileControls hud={hud} />}
+      {device.isPortraitPhone && <RotateOverlay />}
+      {import.meta.env.DEV && <DebugOverlay />}
     </div>
   );
 };

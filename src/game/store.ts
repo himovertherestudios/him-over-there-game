@@ -3,6 +3,7 @@ import {
   DEFAULT_PACKAGES, DEFAULT_CLAUSES, Pkg, ContractClauses, ARCHETYPES, archetypeById,
   Genre, LESSONS, titleFor, ONE_LINERS, Weather, GOAL, gearById,
 } from './data';
+import { getDeviceProfile } from './platform/device';
 
 // ------------------------------------------------------------------
 // Types
@@ -164,7 +165,10 @@ export function loadGame() {
   } catch { return false; }
 }
 export function newGame() {
-  state = { ...baseState(), screen: 'intro' };
+  // Mobile/touch devices default to a conservative quality tier; desktop
+  // keeps the existing 'med' default. A manual choice in the pause menu
+  // (or a loaded save) always takes precedence over this one-time pick.
+  state = { ...baseState(), screen: 'intro', quality: getDeviceProfile().recommendedQuality };
   photoCache.clear();
   emit();
 }
