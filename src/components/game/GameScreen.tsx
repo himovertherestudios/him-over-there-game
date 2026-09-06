@@ -7,6 +7,7 @@ import { input } from '@/game/input/InputManager';
 import { useDeviceProfile } from '@/game/platform/device';
 import { MobileControls } from './mobile/MobileControls';
 import { RotateOverlay } from './mobile/RotateOverlay';
+import { DebugOverlay } from './DebugOverlay';
 import {
   useGame, getState, set, advanceTime, stat, say, saveGame, scoreShot, addPhoto, updateJob,
   learn, fmtMoney, fmtClock, MISSION_STEPS, setMission, completeMission, checkStudioUnlock, leaseStudio,
@@ -486,6 +487,7 @@ export const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
       {/* ---------- MOBILE TOUCH CONTROLS ---------- */}
       {device.isMobile && !phone && !overlay && !mishap && !paused && !device.isPortraitPhone && <MobileControls hud={hud} />}
       {device.isPortraitPhone && <RotateOverlay />}
+      {import.meta.env.DEV && <DebugOverlay />}
     </div>
   );
 };

@@ -7,6 +7,7 @@ import { LOTS, PARKING, archetypeById } from './data';
 import { getState, ShotSettings } from './store';
 import { sfx } from './audio';
 import { input } from './input/InputManager';
+import { getDeviceProfile } from './platform/device';
 
 export interface Hud {
   prompt: string | null;
@@ -81,6 +82,13 @@ class Engine {
   trainT = 24;
   lastHud = '';
   noise: HTMLCanvasElement | null = null;
+  /** 0 = uncapped (desktop). Mobile targets ~30fps to save battery/GPU. */
+  frameInterval = 0;
+  frameAccum = 0;
+  /** Rendered (post-throttle) frames per second, sampled via wall-clock time. */
+  fps = 0;
+  private fpsWindowStart = 0;
+  private fpsFrames = 0;
 
   onHud: ((h: Hud) => void) | null = null;
   onInteract: ((id: string) => void) | null = null;
@@ -90,11 +98,20 @@ class Engine {
   mount(canvas: HTMLCanvasElement, fx: HTMLCanvasElement) {
     this.canvas = canvas;
     this.fx = fx;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, alpha: true });
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Antialiasing can only be set at WebGL context creation, so the quality
+    // tier at mount time sticks for the session (switching quality later
+    // still updates shadows/fog/DPR live via resize()).
+    // preserveDrawingBuffer is a real perf cost (forces an extra buffer copy
+    // most frames) and isn't needed here: the only readback is capture()'s
+    // camera-mode composite, which drawImage()s this canvas synchronously
+    // right after render() in the same call — before the browser would ever
+    // clear the buffer — so the pixels are always still there to read.
+    const q = getState().quality;
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: q !== 'low', alpha: true });
     this.scene.background = new THREE.Color(0x1a1c22);
     this.scene.fog = new THREE.Fog(0x1a1c22, 90, 260);
+    this.frameInterval = getDeviceProfile().isMobile ? 1 / 30 : 0;
+    this.fpsWindowStart = performance.now();
 
     this.player = buildCharacter({ fit: getState().fit, locsTied: getState().locsTied });
     this.scene.add(this.player.group);
@@ -148,6 +165,19 @@ class Engine {
     const w = window.innerWidth, h = window.innerHeight;
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(w, h, false);
+
+    // Shadows/fog/draw-distance scale with quality; unlike antialiasing these
+    // can change live, so a quality switch mid-session applies immediately.
+    // Fog near/far are mutated in place (not replaced) so its color —
+    // continuously updated per frame for day/night/weather — never resets.
+    this.renderer.shadowMap.enabled = q !== 'low';
+    this.renderer.shadowMap.type = q === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    if (this.scene.fog && 'near' in this.scene.fog) {
+      this.scene.fog.near = q === 'low' ? 45 : 90;
+      this.scene.fog.far = q === 'low' ? 140 : 260;
+    }
+    this.camera.far = q === 'low' ? 300 : 600;
+
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     if (this.fx) { this.fx.width = Math.min(1280, w); this.fx.height = Math.min(1280, w) * (h / w); }
@@ -441,7 +471,31 @@ class Engine {
   loop = () => {
     if (!this.running) return;
     this.raf = requestAnimationFrame(this.loop);
-    const dt = Math.min(0.05, this.clock.getDelta());
+    const rawDt = Math.min(0.05, this.clock.getDelta());
+
+    // Mobile targets ~30fps: skip frames until enough real time has passed,
+    // then step by the fixed target interval rather than the accumulated
+    // (possibly larger) gap, so movement speed stays consistent.
+    let dt = rawDt;
+    if (this.frameInterval > 0) {
+      this.frameAccum += rawDt;
+      if (this.frameAccum < this.frameInterval) return;
+      this.frameAccum = 0;
+      dt = this.frameInterval;
+    }
+
+    // FPS is measured over real wall-clock time between rendered frames, so
+    // it reflects the effective output rate whether or not throttling above
+    // is active (rawDt/dt alone can't tell us how many ticks were skipped).
+    const now = performance.now();
+    this.fpsFrames += 1;
+    const elapsed = now - this.fpsWindowStart;
+    if (elapsed >= 500) {
+      this.fps = Math.round((this.fpsFrames * 1000) / elapsed);
+      this.fpsWindowStart = now;
+      this.fpsFrames = 0;
+    }
+
     const t = this.clock.elapsedTime;
     if (!this.paused) this.update(dt, t);
     this.render(t);
