@@ -6,6 +6,7 @@ import { DIRECTIONS } from '@/game/data';
 import { directSubject } from '@/game/actions';
 import { Btn, Chip, cx } from './ui';
 import { sfx } from '@/game/audio';
+import { useDeviceProfile } from '@/game/platform/device';
 
 const APERTURES = [1.4, 1.8, 2.8, 4, 5.6, 8, 11, 16];
 const SHUTTERS = [1 / 8, 1 / 15, 1 / 30, 1 / 60, 1 / 125, 1 / 250, 1 / 500, 1 / 1000, 1 / 4000];
@@ -35,6 +36,7 @@ export const CameraHUD: React.FC<{ onCapture: () => void; onExit: () => void; sh
   const [tab, setTab] = useState<'cam' | 'light' | 'direct'>('cam');
   const job = useGame((s) => s.job);
   const [tip, setTip] = useState<string | null>('Closer light = softer light, faster falloff.');
+  const device = useDeviceProfile();
 
   useEffect(() => {
     engine.onCamChange = () => force((v) => v + 1);
@@ -202,14 +204,28 @@ export const CameraHUD: React.FC<{ onCapture: () => void; onExit: () => void; sh
           )}
 
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/10 pt-2">
-            <p className="font-mono text-[9px] uppercase tracking-wider text-stone-600">
-              WASD move &middot; drag to aim &middot; wheel = focus &middot; shift+wheel = zoom &middot; click subject = autofocus
-            </p>
+            {!device.isMobile && (
+              <p className="font-mono text-[9px] uppercase tracking-wider text-stone-600">
+                WASD move &middot; drag to aim &middot; wheel = focus &middot; shift+wheel = zoom &middot; click subject = autofocus
+              </p>
+            )}
+            {device.isMobile && (
+              <p className="font-mono text-[9px] uppercase tracking-wider text-stone-600">
+                Drag to aim &middot; tap subject to autofocus
+              </p>
+            )}
             <div className="flex items-center gap-2">
-              <Btn variant="gold" size="lg" onClick={onCapture} disabled={shots >= maxShots}>
-                <Camera className="h-4 w-4" /> Shoot (Space)
+              <Btn
+                variant="gold"
+                size={device.isMobile ? undefined : 'lg'}
+                onClick={onCapture}
+                disabled={shots >= maxShots}
+                className={device.isMobile ? 'h-16 w-16 rounded-full !p-0' : undefined}
+              >
+                <Camera className={device.isMobile ? 'h-6 w-6' : 'h-4 w-4'} />
+                {!device.isMobile && 'Shoot (Space)'}
               </Btn>
-              <Btn variant="ghost" onClick={onExit}><X className="h-3.5 w-3.5" /> Lower camera (C)</Btn>
+              <Btn variant="ghost" onClick={onExit}><X className="h-3.5 w-3.5" /> Lower camera{!device.isMobile && ' (C)'}</Btn>
             </div>
           </div>
         </div>
