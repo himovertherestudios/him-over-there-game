@@ -430,7 +430,7 @@ export const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
 
       {/* ---------- OVERLAYS ---------- */}
       {overlay && overlay !== 'gas' && overlay !== 'act2' && overlay !== 'lease' && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm">
           {overlay === 'work' && <Workstation onClose={() => setOverlay(null)} />}
           {overlay === 'mood' && <Moodboard onClose={() => setOverlay(null)} />}
           {overlay === 'pack' && <PackGear onClose={() => setOverlay(null)} />}
@@ -464,7 +464,7 @@ export const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
       {overlay === 'gas' && <GasPopup onClose={() => setOverlay(null)} />}
       {overlay === 'act2' && <StudioUnlock onClose={() => setOverlay(null)} />}
       {overlay === 'lease' && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/85 p-4">
+        <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/85 p-4">
           <Panel title="Loft 4B Rentals" className="w-[min(520px,95vw)]">
             <div className="p-5 text-center">
               <MapPin className="mx-auto mb-2 h-6 w-6 text-amber-400" />

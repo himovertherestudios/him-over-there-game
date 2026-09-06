@@ -16,7 +16,7 @@ export const PauseMenu: React.FC<{ onClose: () => void; onQuit: () => void }> = 
   const [saved, setSaved] = useState(false);
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/85 p-4 backdrop-blur-sm">
       <Panel className="w-[min(880px,95vw)]" title="Paused" right={<Btn size="sm" variant="ghost" onClick={onClose}><X className="h-3.5 w-3.5" /> Resume</Btn>}>
         <div className="flex flex-wrap gap-1 border-b border-white/10 px-4 py-2">
           {([['main', 'Game', Crown], ['character', 'Character', User], ['controls', 'Controls', Keyboard], ['settings', 'Settings', SlidersHorizontal]] as const).map(([id, label, Icon]) => (
@@ -275,7 +275,7 @@ export const LifeMenu: React.FC<{ kind: string; onClose: () => void }> = ({ kind
 
 // ---------------------------------------------------------------
 export const MishapModal: React.FC<{ mishap: Mishap; onDone: () => void }> = ({ mishap, onDone }) => (
-  <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+  <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm">
     <Panel title="Well." className="w-[min(560px,95vw)]">
       <div className="p-5">
         <h4 className="text-lg font-semibold text-amber-300">{mishap.title}</h4>
@@ -300,7 +300,7 @@ export const MishapModal: React.FC<{ mishap: Mishap; onDone: () => void }> = ({ 
 export const GasPopup: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const s = useGame((g) => g);
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-4">
+    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/80 p-4">
       <Panel title="ShutterMarket \u2014 deal alert" className="w-[min(480px,95vw)]">
         <div className="p-5 text-center">
           <ShoppingCart className="mx-auto mb-2 h-7 w-7 text-amber-400" />
@@ -327,7 +327,7 @@ export const GasPopup: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
 // ---------------------------------------------------------------
 export const StudioUnlock: React.FC<{ onClose: () => void }> = ({ onClose }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black p-6">
+  <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black p-6">
     <div className="max-w-2xl text-center">
       <img src={IMG.skyline} alt="" className="mb-6 w-full rounded-lg opacity-40" />
       <p style={{ fontFamily: '"Bradley Hand","Segoe Script",cursive', textWrap: 'balance' }} className="text-3xl leading-snug text-stone-100 sm:text-4xl">
