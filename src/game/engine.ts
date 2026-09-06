@@ -542,6 +542,17 @@ class Engine {
   update(dt: number, t: number) {
     const run = input.isHeld('sprint');
 
+    // ---- right-side look stick (mobile) ----
+    // Analog, unlike the move stick's held actions: deflection keeps
+    // rotating yaw/pitch every frame for as long as it's held, the same way
+    // a desktop mouse-drag accumulates deltas but scaled by dt since a
+    // stick reports a constant direction rather than discrete move events.
+    const look = input.touch.look;
+    if (look.x || look.y) {
+      this.yaw -= look.x * 2.2 * dt;
+      this.pitch = Math.max(-0.5, Math.min(0.9, this.pitch + look.y * 1.6 * dt));
+    }
+
     // ---- day/night + weather ----
     const s = getState();
     if (this.current?.kind === 'district') {
@@ -637,7 +648,7 @@ class Engine {
       if (fwd || strafe) {
         const camDir = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
         const right = new THREE.Vector3(camDir.z, 0, -camDir.x);
-        dir.addScaledVector(camDir, -fwd).addScaledVector(right, -strafe).normalize();
+        dir.addScaledVector(camDir, -fwd).addScaledVector(right, strafe).normalize();
       }
       this.playerVel.lerp(dir.multiplyScalar(speed), Math.min(1, dt * 12));
       const next = this.playerPos.clone().addScaledVector(this.playerVel, dt);

@@ -216,7 +216,7 @@ export const CameraHUD: React.FC<{ onCapture: () => void; onExit: () => void; sh
                 Drag to aim &middot; tap subject to autofocus
               </p>
             )}
-            <div className="flex items-center gap-2">
+            <div className={cx('flex items-center gap-2', device.isMobile && 'mr-20')}>
               <Btn
                 variant="gold"
                 size={device.isMobile ? undefined : 'lg'}

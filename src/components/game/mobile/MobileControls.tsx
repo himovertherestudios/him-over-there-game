@@ -7,8 +7,12 @@ import { cx } from '../ui';
 
 const JOYSTICK_RADIUS = 46;
 
-/** Left-side virtual joystick. Drives the same held move-* actions WASD does. */
-const Joystick: React.FC = () => {
+/**
+ * Generic virtual joystick: reports normalized -1..1 x/y while held and
+ * snaps back to center on release. Used for both the left move stick and
+ * the right look stick, which differ only in what they do with that vector.
+ */
+const StickBase: React.FC<{ onStick: (x: number, y: number) => void; onRelease: () => void; label: string; knobClassName: string }> = ({ onStick, onRelease, label, knobClassName }) => {
   const baseRef = useRef<HTMLDivElement>(null);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
   const pointerId = useRef<number | null>(null);
@@ -24,7 +28,7 @@ const Joystick: React.FC = () => {
     const dist = Math.hypot(dx, dy);
     if (dist > JOYSTICK_RADIUS) { dx = (dx / dist) * JOYSTICK_RADIUS; dy = (dy / dist) * JOYSTICK_RADIUS; }
     setKnob({ x: dx, y: dy });
-    input.touch.setJoystick(dx / JOYSTICK_RADIUS, dy / JOYSTICK_RADIUS);
+    onStick(dx / JOYSTICK_RADIUS, dy / JOYSTICK_RADIUS);
   };
 
   const onDown = (e: React.PointerEvent) => {
@@ -41,7 +45,7 @@ const Joystick: React.FC = () => {
     if (pointerId.current !== e.pointerId) return;
     pointerId.current = null;
     setKnob({ x: 0, y: 0 });
-    input.touch.resetJoystick();
+    onRelease();
   };
 
   return (
@@ -53,15 +57,35 @@ const Joystick: React.FC = () => {
       onPointerCancel={onUp}
       className="relative h-24 w-24 select-none rounded-full border border-white/25 bg-black/45 backdrop-blur"
       style={{ touchAction: 'none' }}
-      aria-label="Move"
+      aria-label={label}
     >
       <div
-        className="pointer-events-none absolute left-1/2 top-1/2 h-11 w-11 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-400/85 shadow-[0_0_16px_-2px_rgba(251,191,36,0.8)]"
+        className={cx('pointer-events-none absolute left-1/2 top-1/2 h-11 w-11 -translate-x-1/2 -translate-y-1/2 rounded-full', knobClassName)}
         style={{ transform: `translate(calc(-50% + ${knob.x}px), calc(-50% + ${knob.y}px))` }}
       />
     </div>
   );
 };
+
+/** Left-side virtual joystick. Drives the same held move-* actions WASD does. */
+const Joystick: React.FC = () => (
+  <StickBase
+    label="Move"
+    knobClassName="bg-amber-400/85 shadow-[0_0_16px_-2px_rgba(251,191,36,0.8)]"
+    onStick={(x, y) => input.touch.setJoystick(x, y)}
+    onRelease={() => input.touch.resetJoystick()}
+  />
+);
+
+/** Right-side virtual joystick. Continuously turns the camera (yaw/pitch), same as dragging, so both thumbs stay anchored. */
+const LookStick: React.FC = () => (
+  <StickBase
+    label="Look"
+    knobClassName="bg-sky-400/85 shadow-[0_0_16px_-2px_rgba(56,189,248,0.8)]"
+    onStick={(x, y) => input.touch.setLook(x, y)}
+    onRelease={() => input.touch.resetLook()}
+  />
+);
 
 /** Press-and-hold control: sets a held action while the finger is down. */
 const HoldButton: React.FC<{ action: GameAction; className?: string; children: React.ReactNode; label: string }> = ({ action, className, children, label }) => {
@@ -115,9 +139,12 @@ export const MobileControls: React.FC<{ hud: Hud }> = ({ hud }) => {
     // Camera settings/shutter are handled by CameraHUD; movement still works
     // (matches desktop, where WASD keeps working with the camera raised).
     return (
-      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-20 flex items-end justify-start px-4" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-20 flex items-end justify-between px-4" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <div className="pointer-events-auto">
           <Joystick />
+        </div>
+        <div className="pointer-events-auto">
+          <LookStick />
         </div>
       </div>
     );
@@ -160,6 +187,7 @@ export const MobileControls: React.FC<{ hud: Hud }> = ({ hud }) => {
           <Hand className="h-5 w-5" />
           {hud.prompt && <span className="max-w-[9rem] truncate text-[11px] font-medium">{hud.prompt}</span>}
         </TapButton>
+        <LookStick />
       </div>
     </div>
   );
