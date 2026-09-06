@@ -426,6 +426,40 @@ class Engine {
     }
   }
 
+  /**
+   * Distance along (ox,oz)+(dx,dz)*t to the nearest collider the follow
+   * camera would otherwise land behind, or null if the sightline to
+   * `maxDist` is clear. Colliders have no stored height, so this treats
+   * them as full-height walls — good enough since nothing in the district
+   * is taller than the buildings they represent.
+   */
+  private cameraSightDist(ox: number, oz: number, dx: number, dz: number, maxDist: number): number | null {
+    let best: number | null = null;
+    for (const c of this.colliders()) {
+      const minX = c.x - c.hw, maxX = c.x + c.hw;
+      const minZ = c.z - c.hd, maxZ = c.z + c.hd;
+      let tmin = 0, tmax = maxDist;
+      if (Math.abs(dx) < 1e-6) {
+        if (ox < minX || ox > maxX) continue;
+      } else {
+        let t1 = (minX - ox) / dx, t2 = (maxX - ox) / dx;
+        if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+        tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+      }
+      if (Math.abs(dz) < 1e-6) {
+        if (oz < minZ || oz > maxZ) continue;
+      } else {
+        let t1 = (minZ - oz) / dz, t2 = (maxZ - oz) / dz;
+        if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+        tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+      }
+      if (tmax < tmin) continue;
+      const hit = Math.max(0, tmin);
+      if (best === null || hit < best) best = hit;
+    }
+    return best;
+  }
+
   nearestParking(): { d: number; p: [number, number, number] } | null {
     let best: { d: number; p: [number, number, number] } | null = null;
     PARKING.forEach((p) => {
@@ -701,10 +735,20 @@ class Engine {
       this.camera.fov = 55;
       const target = new THREE.Vector3(this.playerPos.x, this.inCar ? 1.6 : 1.35, this.playerPos.z);
       const d = this.inCar ? 9.5 : this.dist;
+      const dirX = Math.sin(this.yaw) * Math.cos(this.pitch);
+      const dirZ = Math.cos(this.yaw) * Math.cos(this.pitch);
+      // Pull the camera in front of any wall between it and the player
+      // instead of letting it clip through, same idea as player/car collide().
+      // Buffer/floor stay small on purpose: a wall can be closer to the
+      // player than any "comfortable" orbit distance (e.g. backed into a
+      // corner), and clamping up to a larger minimum would push the camera
+      // back through it. Better to let the camera zoom in close than clip.
+      const wallDist = this.cameraSightDist(target.x, target.z, dirX, dirZ, d);
+      const effD = wallDist === null ? d : Math.max(0.4, wallDist - 0.3);
       const desired = new THREE.Vector3(
-        target.x + Math.sin(this.yaw) * d * Math.cos(this.pitch),
-        target.y + Math.sin(this.pitch) * d + 1.2,
-        target.z + Math.cos(this.yaw) * d * Math.cos(this.pitch),
+        target.x + dirX * effD,
+        Math.max(0.4, target.y + Math.sin(this.pitch) * effD + 1.2),
+        target.z + dirZ * effD,
       );
       this.camera.position.lerp(desired, Math.min(1, dt * 8));
       this.camera.lookAt(target);

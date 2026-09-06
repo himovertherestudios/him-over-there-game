@@ -82,6 +82,18 @@ export const CONTROLS: [string, string][] = [
   ['Esc', 'Pause \u2014 save, load, character, settings'],
 ];
 
+export const MOBILE_CONTROLS: [string, string][] = [
+  ['Left stick', 'Move (steer when in the car)'],
+  ['Right stick', 'Look around / aim the camera'],
+  ['Lightning button', 'Sprint \u2014 drains energy faster'],
+  ['Hand button', 'Interact / enter door / get in the car'],
+  ['Phone icon', 'Phone'],
+  ['Camera icon', 'Raise the camera at a shoot'],
+  ['Shutter button', 'Capture, once the camera is raised'],
+  ['Octagon icon', 'Handbrake while driving'],
+  ['Pause icon', 'Pause \u2014 save, load, character, settings'],
+];
+
 export const TitleScreen: React.FC<{
   hasSave: boolean;
   onNew: () => void;

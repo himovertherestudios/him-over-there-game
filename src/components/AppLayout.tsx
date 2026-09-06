@@ -1,9 +1,10 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { Crown, Play, RotateCcw, Keyboard, Camera, Map, Smartphone, Wallet } from 'lucide-react';
-import { Cinematic, CONTROLS } from './game/TitleScreen';
+import { Cinematic, CONTROLS, MOBILE_CONTROLS } from './game/TitleScreen';
 import { useGame, getState, set, newGame, loadGame, hasSave, makeInquiry, pushInquiry, say, track } from '@/game/store';
 import { sfx } from '@/game/audio';
 import { IMG } from '@/game/imgs';
+import { useDeviceProfile } from '@/game/platform/device';
 
 // GameScreen pulls in the three.js engine, world builder, and every gameplay
 // UI panel — real weight the title/intro screens never need. Loading it as
@@ -30,6 +31,7 @@ const AppLayout: React.FC = () => {
   const screen = useGame((s) => s.screen);
   const [saveExists, setSaveExists] = useState(false);
   const [showControls, setShowControls] = useState(false);
+  const device = useDeviceProfile();
 
   useEffect(() => { setSaveExists(hasSave()); }, [screen]);
 
@@ -149,7 +151,7 @@ const AppLayout: React.FC = () => {
 
             {showControls && (
               <dl className="mt-7 grid max-w-lg grid-cols-1 gap-x-8 gap-y-1.5 rounded-lg border border-white/10 bg-black/60 p-4 sm:grid-cols-2">
-                {CONTROLS.map(([k, v]) => (
+                {(device.isMobile ? MOBILE_CONTROLS : CONTROLS).map(([k, v]) => (
                   <div key={k} className="flex items-baseline justify-between gap-3 border-b border-white/5 py-1">
                     <dt className="font-mono text-[10px] uppercase tracking-wider text-amber-300">{k}</dt>
                     <dd className="text-right text-[11px] text-stone-400">{v}</dd>
