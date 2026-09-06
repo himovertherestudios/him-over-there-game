@@ -104,7 +104,7 @@ export const track = (name: string, props?: Record<string, unknown>) => {
 function baseState(): GameState {
   return {
     screen: 'title', scene: 'apartment',
-    playerPos: [0, 0], playerRot: 0,
+    playerPos: [0, 3], playerRot: 0,
     inCar: false, carPos: [-30, 13], carRot: 0, carParked: true,
     clock: 9 * 60, day: 1, weather: 'overcast', winter: false,
     money: 312.4, energy: 78, stress: 34, rep: 3, creativity: 40, hunger: 55,

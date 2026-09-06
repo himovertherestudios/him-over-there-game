@@ -51,7 +51,7 @@ export const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
     engine.mount(canvasRef.current, fxRef.current);
     engine.setMinimap(miniRef.current);
     engine.onHud = (h) => setHud(h);
-    engine.setScene(getState().scene || 'apartment', [0, 3]);
+    engine.restorePose();
     sfx.setMuted(getState().muted);
     return () => { engine.onHud = null; engine.unmount(); };
   }, []);
@@ -197,7 +197,7 @@ export const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
         return;
       }
       if (action === 'capture-photo' && engine.camMode) capture();
-      if (action === 'save-game') saveGame();
+      if (action === 'save-game') { engine.syncPoseToStore(); saveGame(); }
     });
     return unsubscribe;
   }, [interact, capture]);
@@ -234,7 +234,7 @@ export const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
 
   // ---------------- autosave ----------------
   useEffect(() => {
-    const iv = window.setInterval(() => { set({ playerPos: [engine.playerPos.x, engine.playerPos.z], scene: engine.currentId }); saveGame(); }, 45000);
+    const iv = window.setInterval(() => { engine.syncPoseToStore(); saveGame(); }, 45000);
     return () => window.clearInterval(iv);
   }, []);
 

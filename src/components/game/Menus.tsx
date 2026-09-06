@@ -30,12 +30,12 @@ export const PauseMenu: React.FC<{ onClose: () => void; onQuit: () => void }> = 
         {tab === 'main' && (
           <div className="grid gap-4 p-5 sm:grid-cols-2">
             <div className="space-y-2">
-              <Btn variant="gold" className="w-full" onClick={() => { setSaved(saveGame()); window.setTimeout(() => setSaved(false), 1800); }}>
+              <Btn variant="gold" className="w-full" onClick={() => { engine.syncPoseToStore(); setSaved(saveGame()); window.setTimeout(() => setSaved(false), 1800); }}>
                 <Save className="h-3.5 w-3.5" /> {saved ? 'Saved' : 'Save game'}
               </Btn>
-              <Btn className="w-full" onClick={() => { if (loadGame()) { engine.refreshPlayerLook(); onClose(); } }}><FolderOpen className="h-3.5 w-3.5" /> Load last save</Btn>
+              <Btn className="w-full" onClick={() => { if (loadGame()) { engine.restorePose(); engine.refreshPlayerLook(); onClose(); } }}><FolderOpen className="h-3.5 w-3.5" /> Load last save</Btn>
               <Btn variant="ghost" className="w-full" onClick={onClose}>Resume</Btn>
-              <Btn variant="danger" className="w-full" onClick={() => { saveGame(); onQuit(); }}>Save &amp; quit to title</Btn>
+              <Btn variant="danger" className="w-full" onClick={() => { engine.syncPoseToStore(); saveGame(); onQuit(); }}>Save &amp; quit to title</Btn>
             </div>
             <div className="space-y-2 rounded-md border border-white/10 p-3">
               <p className="font-mono text-[10px] uppercase tracking-widest text-stone-500">Skills</p>

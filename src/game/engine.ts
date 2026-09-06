@@ -4,7 +4,7 @@ import {
   applyPose, DEFAULT_POSE, Pose, CharParts, WorldRefs, InteriorRefs, LightRig,
 } from './world';
 import { LOTS, PARKING, archetypeById } from './data';
-import { getState, ShotSettings } from './store';
+import { getState, set, ShotSettings } from './store';
 import { sfx } from './audio';
 import { input } from './input/InputManager';
 import { getDeviceProfile } from './platform/device';
@@ -242,6 +242,42 @@ class Engine {
     this.pushHud(true);
   }
 
+
+  /**
+   * Syncs the engine's world position/rotation/vehicle state from the store.
+   * setScene() alone only places the player at a given spawn point; this
+   * also restores facing direction and whether/where the car was left, so
+   * a loaded save drops the player back where they actually were instead
+   * of a fixed spawn point.
+   */
+  restorePose() {
+    const s = getState();
+    this.setScene(s.scene || 'apartment', s.playerPos);
+    this.playerRot = s.playerRot;
+    this.player.group.rotation.y = s.playerRot;
+    this.inCar = s.inCar;
+    this.carPos.set(s.carPos[0], 0, s.carPos[1]);
+    this.carRot = s.carRot;
+    if (this.car) { this.car.position.copy(this.carPos); this.car.rotation.y = this.carRot; }
+    if (s.inCar) this.playerPos.copy(this.carPos);
+  }
+
+  /**
+   * Pushes the engine's live position/rotation/vehicle state into the store.
+   * The store only tracks these for save/load — live gameplay reads them
+   * straight off the engine — so nothing keeps them current on its own;
+   * every save call site must call this first or it persists stale values.
+   */
+  syncPoseToStore() {
+    set({
+      scene: this.currentId,
+      playerPos: [this.playerPos.x, this.playerPos.z],
+      playerRot: this.playerRot,
+      inCar: this.inCar,
+      carPos: [this.carPos.x, this.carPos.z],
+      carRot: this.carRot,
+    });
+  }
 
   refreshPlayerLook() {
     const s = getState();
