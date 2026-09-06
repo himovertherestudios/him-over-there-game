@@ -70,6 +70,7 @@ export interface GameState {
   quality: 'low' | 'med' | 'high'; muted: boolean;
   notifications: number;
   toast: { id: number; text: string; kind: string } | null;
+  msgPopup: { id: number; name: string; text: string } | null;
 }
 
 const SAVE_KEY = 'hot_save_v1';
@@ -118,7 +119,7 @@ function baseState(): GameState {
     mission: 0, missionDone: false, flags: {},
     lessons: [], lenz: { followers: 84, posts: [] }, notes: [],
     studioUnlocked: false, act2: false,
-    quality: 'med', muted: false, notifications: 0, toast: null,
+    quality: 'med', muted: false, notifications: 0, toast: null, msgPopup: null,
   };
 }
 
@@ -149,7 +150,7 @@ export const fullUrl = (p: Photo) => photoCache.get(p.id) || p.url;
 // ------------------------------------------------------------------
 export function saveGame() {
   try {
-    const trimmed: GameState = { ...state, toast: null, photos: state.photos.slice(-44) };
+    const trimmed: GameState = { ...state, toast: null, msgPopup: null, photos: state.photos.slice(-44) };
     localStorage.setItem(SAVE_KEY, JSON.stringify(trimmed));
     return true;
   } catch { return false; }
@@ -160,7 +161,7 @@ export function loadGame() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return false;
     const parsed = JSON.parse(raw) as GameState;
-    state = { ...baseState(), ...parsed, screen: 'play', toast: null };
+    state = { ...baseState(), ...parsed, screen: 'play', toast: null, msgPopup: null };
     emit();
     // Full-res photo data doesn't fit in localStorage, so it isn't part of
     // the save above — rehydrate it from IndexedDB in the background.
@@ -191,6 +192,20 @@ export function say(text: string, kind: 'him' | 'info' | 'good' | 'bad' | 'money
   toastTimer = window.setTimeout(() => set({ toast: null }), 4200);
 }
 export const oneLiner = () => say(pick(ONE_LINERS));
+
+// ------------------------------------------------------------------
+// Incoming-text popup (iOS-style banner, separate from the narration toast
+// above so a "he says" one-liner and a text from a client never fight for
+// the same slot).
+// ------------------------------------------------------------------
+let msgPopupId = 0;
+let msgPopupTimer: number | null = null;
+export function notifyMessage(name: string, text: string) {
+  msgPopupId += 1;
+  set({ msgPopup: { id: msgPopupId, name, text } });
+  if (msgPopupTimer) window.clearTimeout(msgPopupTimer);
+  msgPopupTimer = window.setTimeout(() => set({ msgPopup: null }), 4500);
+}
 
 // ------------------------------------------------------------------
 // Economy
@@ -269,11 +284,17 @@ export function makeInquiry(archId?: string): Inquiry {
 }
 export function pushInquiry(inq: Inquiry) {
   set((s) => ({ inquiries: [inq, ...s.inquiries].slice(0, 24), notifications: s.notifications + 1 }));
+  const opener = inq.thread[inq.thread.length - 1];
+  if (opener) notifyMessage(inq.name, opener.text);
 }
 export function reply(inqId: string, text: string, from: 'me' | 'them' = 'me') {
   set((s) => ({
     inquiries: s.inquiries.map((i) => (i.id === inqId ? { ...i, thread: [...i.thread, { from, text, t: s.clock }] } : i)),
   }));
+  if (from === 'them') {
+    const inq = state.inquiries.find((i) => i.id === inqId);
+    if (inq) notifyMessage(inq.name, text);
+  }
 }
 export function setInquiryStatus(inqId: string, status: Inquiry['status']) {
   set((s) => ({ inquiries: s.inquiries.map((i) => (i.id === inqId ? { ...i, status } : i)) }));
