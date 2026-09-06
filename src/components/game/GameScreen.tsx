@@ -422,6 +422,28 @@ export const GameScreen: React.FC<{ onQuit: () => void }> = ({ onQuit }) => {
         </div>
       )}
 
+      {/* ---------- INCOMING TEXT (iOS-style banner) ---------- */}
+      {s.msgPopup && (
+        <div key={s.msgPopup.id} className="absolute left-1/2 top-4 z-50 w-[min(380px,92vw)] -translate-x-1/2 animate-in fade-in slide-in-from-top-4">
+          <button
+            type="button"
+            onClick={() => { set({ msgPopup: null }); setPhone(true); setPaused(false); sfx.click(); }}
+            className="flex w-full items-start gap-3 rounded-2xl border border-white/10 bg-black/85 px-3.5 py-3 text-left shadow-[0_8px_30px_-6px_rgba(0,0,0,0.7)] backdrop-blur-xl transition-transform active:scale-[0.98]"
+          >
+            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-[13px] font-bold text-amber-300">
+              {s.msgPopup.name[0]}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="truncate text-[13px] font-semibold text-white">{s.msgPopup.name}</span>
+                <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-stone-500">now</span>
+              </span>
+              <span className="mt-0.5 block truncate text-[12px] text-stone-300">{s.msgPopup.text}</span>
+            </span>
+          </button>
+        </div>
+      )}
+
       {/* ---------- CAMERA HUD ---------- */}
       {hud.camMode && <CameraHUD onCapture={capture} onExit={() => engine.exitCameraMode()} shots={s.cardUsed} maxShots={64} />}
 
