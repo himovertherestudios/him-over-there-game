@@ -4,6 +4,7 @@ import {
   Genre, LESSONS, titleFor, ONE_LINERS, Weather, GOAL, gearById,
 } from './data';
 import { getDeviceProfile } from './platform/device';
+import { putPhoto, getAllPhotos, clearPhotos } from './storage/photoStore';
 
 // ------------------------------------------------------------------
 // Types
@@ -103,7 +104,7 @@ export const track = (name: string, props?: Record<string, unknown>) => {
 function baseState(): GameState {
   return {
     screen: 'title', scene: 'apartment',
-    playerPos: [0, 0], playerRot: 0,
+    playerPos: [0, 3], playerRot: 0,
     inCar: false, carPos: [-30, 13], carRot: 0, carParked: true,
     clock: 9 * 60, day: 1, weather: 'overcast', winter: false,
     money: 312.4, energy: 78, stress: 34, rep: 3, creativity: 40, hunger: 55,
@@ -161,6 +162,10 @@ export function loadGame() {
     const parsed = JSON.parse(raw) as GameState;
     state = { ...baseState(), ...parsed, screen: 'play', toast: null };
     emit();
+    // Full-res photo data doesn't fit in localStorage, so it isn't part of
+    // the save above — rehydrate it from IndexedDB in the background.
+    // fullUrl() already falls back to the thumbnail until this resolves.
+    void getAllPhotos().then((restored) => { restored.forEach((v, k) => photoCache.set(k, v)); });
     return true;
   } catch { return false; }
 }
@@ -170,6 +175,7 @@ export function newGame() {
   // (or a loaded save) always takes precedence over this one-time pick.
   state = { ...baseState(), screen: 'intro', quality: getDeviceProfile().recommendedQuality };
   photoCache.clear();
+  void clearPhotos();
   emit();
 }
 
@@ -365,6 +371,7 @@ export function scoreShot(s: ShotSettings, sceneEV: number, subjectMotion: numbe
 
 export function addPhoto(p: Photo, fullDataUrl: string) {
   photoCache.set(p.id, fullDataUrl);
+  void putPhoto(p.id, fullDataUrl);
   set((s) => ({ photos: [...s.photos, p], cardUsed: s.cardUsed + 1 }));
 }
 export function starPhoto(id: string, on: boolean) {
