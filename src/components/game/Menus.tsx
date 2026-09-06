@@ -4,16 +4,18 @@ import { useGame, getState, set, saveGame, loadGame, fmtMoney, addMoney, say, up
 import { GEAR, FITS, FOOD, MOOD_TILES, Mishap } from '@/game/data';
 import { IMG } from '@/game/imgs';
 import { Btn, Panel, Chip, Bar, cx } from './ui';
-import { CONTROLS } from './TitleScreen';
+import { CONTROLS, MOBILE_CONTROLS } from './TitleScreen';
 import { sfx } from '@/game/audio';
 import { engine } from '@/game/engine';
 import { sleep, eat, gym, relaxTV, networkAtBar, resolveMishap } from '@/game/actions';
+import { useDeviceProfile } from '@/game/platform/device';
 
 // ---------------------------------------------------------------
 export const PauseMenu: React.FC<{ onClose: () => void; onQuit: () => void }> = ({ onClose, onQuit }) => {
   const s = useGame((g) => g);
   const [tab, setTab] = useState<'main' | 'controls' | 'character' | 'settings'>('main');
   const [saved, setSaved] = useState(false);
+  const device = useDeviceProfile();
 
   return (
     <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/85 p-4 backdrop-blur-sm">
@@ -77,7 +79,7 @@ export const PauseMenu: React.FC<{ onClose: () => void; onQuit: () => void }> = 
 
         {tab === 'controls' && (
           <dl className="grid gap-x-8 gap-y-1 p-5 sm:grid-cols-2">
-            {CONTROLS.map(([k, v]) => (
+            {(device.isMobile ? MOBILE_CONTROLS : CONTROLS).map(([k, v]) => (
               <div key={k} className="flex items-baseline justify-between gap-3 border-b border-white/5 py-1.5">
                 <dt className="font-mono text-[10px] uppercase tracking-wider text-amber-300">{k}</dt>
                 <dd className="text-right text-[11px] text-stone-400">{v}</dd>
